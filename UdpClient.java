@@ -32,9 +32,7 @@ public class UdpClient{
 				byte[] packet = buildPacket(destPort, udpDataSize, socket);
 				long start = System.currentTimeMillis();
 				out.write(packet);
-				Thread.sleep(41);
 				long end = System.currentTimeMillis();
-				//System.out.println("end  : " + end);
 				System.out.print("packet size: " + udpDataSize + "\n0x");
 				
 				for(byte e: code)
