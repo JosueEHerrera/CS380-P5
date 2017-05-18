@@ -5,30 +5,38 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
 import java.util.Random;
+import java.util.*;
 
 public class UdpClient{
 
-	public static void main(String[] args)throws IOException{
+	public static void main(String[] args)throws Exception{
 		try(Socket socket = new Socket("codebank.xyz", 38005)){
 			InputStream in = socket.getInputStream();
 			OutputStream out = socket.getOutputStream();
-			out.write(handshake());
+			
+			out.write(handshake(socket));
 			byte[] code = new byte[4];
+			
 			in.read(code);
 			System.out.print("Handshake:\n0x");
+			
 			for(byte e: code)
 				System.out.printf("%02X", e);
 			System.out.println("\n");
+			
 			byte[] destPort = new byte[2];
 			in.read(destPort);
+			
 			for(int i = 1; i < 13; i++){
 				int udpDataSize = (int)Math.pow(2.0, (double)i);
-				byte[] packet = buildPacket(destPort, udpDataSize);
-				double start = System.currentTimeMillis();
+				byte[] packet = buildPacket(destPort, udpDataSize, socket);
+				long start = System.currentTimeMillis();
 				out.write(packet);
-				in.read(code);
-				double end = System.currentTimeMillis();
-				System.out.print("packet size: 28 + " + udpDataSize + "\n0x");
+				Thread.sleep(41);
+				long end = System.currentTimeMillis();
+				//System.out.println("end  : " + end);
+				System.out.print("packet size: " + udpDataSize + "\n0x");
+				
 				for(byte e: code)
 					System.out.printf("%02X", e);
 				System.out.println("\nRTT: " + (end-start) + " ms\n");
@@ -36,7 +44,8 @@ public class UdpClient{
 		}
 	}
 
-	private static byte[] handshake(){
+	private static byte[] handshake(Socket socket){
+		byte[] destArray = socket.getInetAddress().getAddress();
 		byte[] packet = new byte[24];
 		packet[0] = 0b01000101; //version 4 and HLen 5
 		packet[1] = 0; //TOS
@@ -52,10 +61,8 @@ public class UdpClient{
 		packet[11] = 0; //assume checksum 0 first
 		for(int j = 12; j < 16; j++) //all 0s for sourceAddr
 		packet[j] = 0;
-		packet[16] = (byte) 52;
-		packet[17] = (byte) 33;
-		packet[18] = (byte) 131;
-		packet[19] = (byte) 16;
+		for(int i = 0; i < 4; i++)
+			packet[i+16] = destArray[i];
 		short checksum = checksum(packet, 20); //calc checksum
 		packet[10] = (byte)(checksum >>> 8); //first byte of checksum
 		packet[11] = (byte)checksum; //second byte of checksum
@@ -66,7 +73,8 @@ public class UdpClient{
 		return packet;
 	}
 
-	private static byte[] buildPacket(byte[] destPort, int udpDataSize){
+	private static byte[] buildPacket(byte[] destPort, int udpDataSize, Socket socket) throws Exception{
+		byte[] destArray = socket.getInetAddress().getAddress();
 		int totalSize = 28 + udpDataSize;
 		byte[] packet = new byte[totalSize];
 		new Random().nextBytes(packet); //fill random data first
@@ -85,10 +93,8 @@ public class UdpClient{
 		packet[11] = 0; //assume checksum 0 first
 		for(int j = 12; j < 16; j++) //all 0s for sourceAddr
 			packet[j] = 0;
-		packet[16] = 52;
-		packet[17] = 33;
-		packet[18] = (byte)131;
-		packet[19] = 16;
+		for(int i = 0; i < 4; i++)
+			packet[i+16] = destArray[i];
 		short checksum = checksum(packet, 20); //calc checksum
 		packet[10] = (byte)(checksum >>> 8); //first byte of checksum
 		packet[11] = (byte)checksum; //second byte of checksum
@@ -101,22 +107,20 @@ public class UdpClient{
 		packet[25] = (byte) udpSize; //UDP length cont'd
 		packet[26] = 0; //assume checksum 0 first
 		packet[27] = 0; //assume checksum 0 first
-		byte[] pseudoHeaderAndUDP = makePsdHdrUDP(packet, udpSize + 12);
+		byte[] pseudoHeaderAndUDP = makePsdHdrUDP(packet, udpSize + 12,socket);
 		checksum = checksum(pseudoHeaderAndUDP, udpSize + 12);
 		packet[26] = (byte)(checksum>>>8); //assume checksum 0 first
 		packet[27] = (byte) checksum;
 		return packet;
 	}
 
-	private static byte[] makePsdHdrUDP(byte[] packet, int size){
+	private static byte[] makePsdHdrUDP(byte[] packet, int size, Socket socket) throws Exception{
+		byte[] destArray = socket.getInetAddress().getAddress();
 		byte[] psdoHdrUDP = new byte[size];
 		psdoHdrUDP[0] = 0; //protocol pad
 		psdoHdrUDP[1] = 17; //protocol
-		//skip psdoHdrUDP[2 thru 5] for sourceAddr
-		psdoHdrUDP[6] = 52;
-		psdoHdrUDP[7] = 33;
-		psdoHdrUDP[8] = (byte)131;
-		psdoHdrUDP[9] = 16;
+		for(int i = 0; i < 4; i++)
+			packet[i+6] = destArray[i];
 		psdoHdrUDP[10] = packet[24];
 		psdoHdrUDP[11] = packet[25];
 		for(int i = 12; i < size; i++){
